@@ -13,7 +13,7 @@ app.use(bodyParser.json());
 app.use(session({
   resave: true,
   saveUninitialized: true,
-  secret: 'keyboardcat'
+  secret: config.secret
 }))
 app.use(passport.initialize());
 app.use(passport.session());
@@ -39,8 +39,7 @@ const db = app.get('db');
 
 passport.use(new LocalStrategy(
   function(username, password, done) {
-    db.getUserByUsername([username], function(err, user) {
-      user = user[0];
+    db.users.findOne({username: username}, function(err, user) {
       if (err) { return done(err); }
       if (!user) { return done(null, false); }
       if (user.password != password) { return done(null, false); }
@@ -48,27 +47,6 @@ passport.use(new LocalStrategy(
     })
   }
 ))
-
-passport.use(new FacebookStrategy({
-  clientID: config.facebook.clientID,
-  clientSecret: config.facebook.clientSecret,
-  callbackURL: "http://localhost:3000/auth/facebook/callback",
-  profileFields: ['id', 'displayName']
-},
-function(accessToken, refreshToken, profile, cb) {
-  db.getUserByFacebookId([profile.id], function(err, user) {
-    user = user[0];
-    if (!user) {
-      console.log('CREATING USER');
-      db.createUserFacebook([profile.displayName, profile.id], function(err, user) {
-        console.log('USER CREATED', user);
-        return cb(err, user);
-      })
-    } else {
-      return cb(err, user);
-    }
-  })
-}));
 
 passport.serializeUser(function(user, done) {
   done(null, user.userid);
@@ -88,12 +66,7 @@ app.post('/auth/local', passport.authenticate('local'), function(req, res) {
   res.status(200).send();
 });
 
-app.get('/auth/facebook', passport.authenticate('facebook'))
 
-app.get('/auth/facebook/callback',
-  passport.authenticate('facebook', {successRedirect: '/' }), function(req, res) {
-    res.status(200).send(req.user);
-  })
 
 app.get('/auth/me', function(req, res) {
   if (!req.user) return res.sendStatus(404);
@@ -108,3 +81,37 @@ app.get('/auth/logout', function(req, res) {
 app.listen(3000, function() {
   console.log('Connected on 3000')
 })
+
+
+
+
+
+// passport.use(new FacebookStrategy({
+//   clientID: config.facebook.clientID,
+//   clientSecret: config.facebook.clientSecret,
+//   callbackURL: "http://localhost:3000/auth/facebook/callback",
+//   profileFields: ['id', 'displayName']
+// },
+// function(accessToken, refreshToken, profile, cb) {
+//   db.getUserByFacebookId([profile.id], function(err, user) {
+//     user = user[0];
+//     if (!user) {
+//       console.log('CREATING USER');
+//       db.createUserFacebook([profile.displayName, profile.id], function(err, user) {
+//         console.log('USER CREATED', user);
+//         return cb(err, user);
+//       })
+//     } else {
+//       return cb(err, user);
+//     }
+//   })
+// }));
+//
+//
+//
+// app.get('/auth/facebook', passport.authenticate('facebook'))
+
+// app.get('/auth/facebook/callback',
+//   passport.authenticate('facebook', {successRedirect: '/' }), function(req, res) {
+//     res.status(200).send(req.user);
+//   })
