@@ -1,6 +1,7 @@
 angular.module('app')
-.controller('homeController', function($scope, userService, $state) {
+.controller('homeController', function($scope, userService, $state, $routeParams) {
 
+  userService.checkForToken($routeParams.token);
 
   function getUser() {
     userService.getUser().then(function(user) {
@@ -23,6 +24,7 @@ angular.module('app')
   }
 
   $scope.logout = userService.logout;
+
 
 
 })

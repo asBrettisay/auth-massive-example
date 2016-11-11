@@ -1,22 +1,19 @@
 const express = require('express'),
-      session = require('express-session'),
       bodyParser = require('body-parser'),
       massive = require('massive'),
       passport = require('passport'),
       LocalStrategy = require('passport-local').Strategy,
       FacebookStrategy = require('passport-facebook').Strategy,
       config = require('./config.js'),
-      cors = require('cors');
+      cors = require('cors'),
+      jwt = require('jsonwebtoken'),
+      cookieParser = require('cookie-parser'),
+      users = {};
 
 const app = express();
 app.use(bodyParser.json());
-app.use(session({
-  resave: true,
-  saveUninitialized: true,
-  secret: config.secret
-}))
+app.use(cookieParser());
 app.use(passport.initialize());
-app.use(passport.session());
 
 app.use(express.static('./public'));
 
@@ -30,12 +27,6 @@ const massiveInstance = massive.connectSync({connectionString: 'postgres://local
 app.set('db', massiveInstance);
 const db = app.get('db');
 
-// db.create_user(function(err, user) {
-//   if (err) console.log(err);
-//   else console.log('CREATED USER');
-//   console.log(user);
-// })
-
 
 passport.use(new LocalStrategy(
   function(username, password, done) {
@@ -48,33 +39,31 @@ passport.use(new LocalStrategy(
   }
 ))
 
-passport.serializeUser(function(user, done) {
-  done(null, user.userid);
-})
 
-passport.deserializeUser(function(id, done) {
-  db.getUserById([id], function(err, user) {
-    user = user[0];
-    if (err) console.log(err);
-    else console.log('RETRIEVED USER');
-    console.log(user);
-    done(null, user);
-  })
-})
-
-app.post('/auth/local', passport.authenticate('local'), function(req, res) {
-  res.status(200).send();
+app.post('/auth/local', passport.authenticate('local', {session: false}), function(req, res) {
+  const token = jwt.sign(req.user, config.secret)
+  res.cookie('my-token', token, {maxAge: 900000})
+  res.status(200).redirect('/#/');
 });
 
+app.get('/auth/facebook', passport.authenticate('facebook'))
 
 
 app.get('/auth/me', function(req, res) {
-  if (!req.user) return res.sendStatus(404);
-  res.status(200).send(req.user);
+  const token = req.cookies['my-token'];
+  console.log(token);
+  if (token) {
+    const user = jwt.verify(token, config.secret);
+    console.log(user);
+    res.status(200).send(user);
+  } else {
+    res.status(200).send();
+  }
+  
 })
 
 app.get('/auth/logout', function(req, res) {
-  req.logout();
+  res.cookie
   res.redirect('/');
 })
 
@@ -86,32 +75,33 @@ app.listen(3000, function() {
 
 
 
-// passport.use(new FacebookStrategy({
-//   clientID: config.facebook.clientID,
-//   clientSecret: config.facebook.clientSecret,
-//   callbackURL: "http://localhost:3000/auth/facebook/callback",
-//   profileFields: ['id', 'displayName']
-// },
-// function(accessToken, refreshToken, profile, cb) {
-//   db.getUserByFacebookId([profile.id], function(err, user) {
-//     user = user[0];
-//     if (!user) {
-//       console.log('CREATING USER');
-//       db.createUserFacebook([profile.displayName, profile.id], function(err, user) {
-//         console.log('USER CREATED', user);
-//         return cb(err, user);
-//       })
-//     } else {
-//       return cb(err, user);
-//     }
-//   })
-// }));
-//
-//
-//
-// app.get('/auth/facebook', passport.authenticate('facebook'))
+passport.use(new FacebookStrategy({
+  clientID: config.facebook.clientID,
+  clientSecret: config.facebook.clientSecret,
+  callbackURL: "http://localhost:3000/auth/facebook/callback",
+  profileFields: ['id', 'displayName']
+},
+function(accessToken, refreshToken, profile, done) {
+  db.getUserByFacebookId([profile.id], function(err, user) {
+    user = user[0];
+    if (!user) {
+      console.log('CREATING USER');
+      db.createUserFacebook([profile.displayName, profile.id], function(err, user) {
+        return done(err, user, {scope: 'all'});
+      })
+    } else {
+      return done(err, user);
+    }
+  })
+}));
 
-// app.get('/auth/facebook/callback',
-//   passport.authenticate('facebook', {successRedirect: '/' }), function(req, res) {
-//     res.status(200).send(req.user);
-//   })
+
+
+app.get('/auth/facebook', passport.authenticate('facebook'))
+
+app.get('/auth/facebook/callback',
+  passport.authenticate('facebook', {session: false}), function(req, res) {
+    const token = jwt.sign(req.user, config.secret)
+    res.cookie('my-token', token, {maxAge: 10000})
+    res.status(200).redirect('/#/');
+  })

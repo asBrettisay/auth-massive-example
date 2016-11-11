@@ -1,4 +1,4 @@
-angular.module('app', ['ui.router'])
+angular.module('app', ['ui.router', 'ngRoute'])
 .config(function($urlRouterProvider, $stateProvider) {
   $urlRouterProvider.otherwise('/')
 

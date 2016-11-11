@@ -1,1 +1,1 @@
-select * from users where userid = $1;
+select username, userid from users where userid = $1;

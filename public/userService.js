@@ -39,4 +39,10 @@ angular.module('app')
       console.log(err);
     })
   }
+
+  this.checkForToken = function(token) {
+    if (token) {
+      sessionStorage.setItem('myToken', token)
+    }
+  }
 })
