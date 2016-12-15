@@ -8,12 +8,21 @@ const express = require('express'),
       cors = require('cors'),
       jwt = require('jsonwebtoken'),
       cookieParser = require('cookie-parser'),
+      session = require('express-session'),
       users = {};
 
 const app = express();
 app.use(bodyParser.json());
 app.use(cookieParser());
+
+app.use(session({
+  secret: config.secret,
+  saveUninitialized: false,
+  resave: true
+}))
+
 app.use(passport.initialize());
+app.use(passport.session());
 
 app.use(express.static('./public'));
 
@@ -27,8 +36,10 @@ const massiveInstance = massive.connectSync({connectionString: 'postgres://local
 app.set('db', massiveInstance);
 const db = app.get('db');
 
-
-passport.use(new LocalStrategy(
+/**
+ * Local Auth
+ */
+passport.use('local', new LocalStrategy(
   function(username, password, done) {
     db.users.findOne({username: username}, function(err, user) {
       if (err) { return done(err); }
@@ -39,43 +50,7 @@ passport.use(new LocalStrategy(
   }
 ))
 
-
-app.post('/auth/local', passport.authenticate('local', {session: false}), function(req, res) {
-  const token = jwt.sign(req.user, config.secret)
-  res.cookie('my-token', token, {maxAge: 900000})
-  res.status(200).redirect('/#/');
-});
-
-app.get('/auth/facebook', passport.authenticate('facebook'))
-
-
-app.get('/auth/me', function(req, res) {
-  const token = req.cookies['my-token'];
-  console.log(token);
-  if (token) {
-    const user = jwt.verify(token, config.secret);
-    console.log(user);
-    res.status(200).send(user);
-  } else {
-    res.status(200).send();
-  }
-  
-})
-
-app.get('/auth/logout', function(req, res) {
-  res.cookie
-  res.redirect('/');
-})
-
-app.listen(3000, function() {
-  console.log('Connected on 3000')
-})
-
-
-
-
-
-passport.use(new FacebookStrategy({
+passport.use('facebook', new FacebookStrategy({
   clientID: config.facebook.clientID,
   clientSecret: config.facebook.clientSecret,
   callbackURL: "http://localhost:3000/auth/facebook/callback",
@@ -95,13 +70,43 @@ function(accessToken, refreshToken, profile, done) {
   })
 }));
 
+passport.serializeUser(function(user, done) {
+  return done(null, user);
+})
+
+passport.deserializeUser(function(user, done) {
+  return done(null, user);
+})
+
+
+app.post('/auth/local', passport.authenticate('local'), function(req, res) {
+  res.status(200).redirect('/#/');
+});
+
+
+app.get('/auth/me', function(req, res) {
+  if (req.user) {
+    console.log(req.user);
+    res.status(200).send(req.user);
+  } else {
+    console.log('NO user!')
+    res.status(200).send();
+  }
+})
+
+app.get('/auth/logout', function(req, res) {
+  req.logout();
+  res.redirect('/');
+})
+
+app.listen(3000, function() {
+  console.log('Connected on 3000')
+})
 
 
 app.get('/auth/facebook', passport.authenticate('facebook'))
 
 app.get('/auth/facebook/callback',
   passport.authenticate('facebook', {session: false}), function(req, res) {
-    const token = jwt.sign(req.user, config.secret)
-    res.cookie('my-token', token, {maxAge: 10000})
     res.status(200).redirect('/#/');
   })
