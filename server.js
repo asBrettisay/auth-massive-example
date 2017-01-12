@@ -8,8 +8,7 @@ const express = require('express'),
       cors = require('cors'),
       jwt = require('jsonwebtoken'),
       cookieParser = require('cookie-parser'),
-      session = require('express-session'),
-      users = {};
+      session = require('express-session');
 
 const app = express();
 app.use(bodyParser.json());
@@ -31,7 +30,7 @@ app.use(express.static('./public'));
 /////////////
 // DATABASE //
 /////////////
-const massiveInstance = massive.connectSync({connectionString: 'postgres://localhost/sandbox'})
+const massiveInstance = massive.connectSync({connectionString: 'postgres://localhost/Brett'})
 
 app.set('db', massiveInstance);
 const db = app.get('db');
@@ -83,6 +82,14 @@ app.post('/auth/local', passport.authenticate('local'), function(req, res) {
   res.status(200).redirect('/#/');
 });
 
+function isAuthed(req, res, next) {
+  if (req.user) {
+    next();
+  } else {
+    res.status(403).send({msg: 'YOU SHALL NOT PASS!!!'});
+  }
+}
+
 
 app.get('/auth/me', function(req, res) {
   if (req.user) {
@@ -107,6 +114,6 @@ app.listen(3000, function() {
 app.get('/auth/facebook', passport.authenticate('facebook'))
 
 app.get('/auth/facebook/callback',
-  passport.authenticate('facebook', {session: false}), function(req, res) {
+  passport.authenticate('facebook'), function(req, res) {
     res.status(200).redirect('/#/');
   })
