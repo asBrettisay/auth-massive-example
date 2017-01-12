@@ -30,7 +30,7 @@ app.use(express.static('./public'));
 /////////////
 // DATABASE //
 /////////////
-const massiveInstance = massive.connectSync({connectionString: 'postgres://localhost/Brett'})
+const massiveInstance = massive.connectSync({connectionString: 'postgres://localhost/YOUR-DATABASE-HERE'})
 
 app.set('db', massiveInstance);
 const db = app.get('db');
