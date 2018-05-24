@@ -1,73 +1,64 @@
-const express = require('express'),
-      bodyParser = require('body-parser'),
-      massive = require('massive'),
-      passport = require('passport'),
-      LocalStrategy = require('passport-local').Strategy,
-      FacebookStrategy = require('passport-facebook').Strategy,
-      config = require('./config.js'),
-      cors = require('cors'),
-      jwt = require('jsonwebtoken'),
-      cookieParser = require('cookie-parser'),
-      session = require('express-session');
+const express = require('express')
+const session = require('express-session')
+const bodyParser = require('body-parser')
+const massive = require('massive')
+const passport = require('passport')
+const Auth0Strategy = require('passport-auth0')
+const LocalStrategy = require('passport-local')
+require('dotenv').config()
+
 
 const app = express();
 app.use(bodyParser.json());
-app.use(cookieParser());
-
 app.use(session({
-  secret: config.secret,
-  saveUninitialized: false,
-  resave: true
-}))
-
+  secret: process.env.SECRET,
+  resave: false,
+  saveUninitialized: true
+}));
 app.use(passport.initialize());
 app.use(passport.session());
-
-app.use(express.static('./public'));
-
-
 
 /////////////
 // DATABASE //
 /////////////
-const massiveInstance = massive.connectSync({connectionString: 'postgres://localhost/YOUR-DATABASE-HERE'})
-
-app.set('db', massiveInstance);
-const db = app.get('db');
+massive({connectionString: 'postgres://localhost/sandbox'}).then(db => {
+  app.set('db', db)
+})
 
 /**
  * Local Auth
  */
 passport.use('local', new LocalStrategy(
-  function(username, password, done) {
+  function(username, password, next) {
     db.users.findOne({username: username}, function(err, user) {
-      if (err) { return done(err); }
-      if (!user) { return done(null, false); }
-      if (user.password != password) { return done(null, false); }
-      return done(null, user);
+      if (err) { return next(err); }
+      if (!user) { return next(null, false); }
+      if (user.password != password) { return next(null, false); }
+      return next(null, user);
     })
   }
 ))
 
-passport.use('facebook', new FacebookStrategy({
-  clientID: config.facebook.clientID,
-  clientSecret: config.facebook.clientSecret,
-  callbackURL: "http://localhost:3000/auth/facebook/callback",
-  profileFields: ['id', 'displayName']
-},
-function(accessToken, refreshToken, profile, done) {
-  db.getUserByFacebookId([profile.id], function(err, user) {
-    user = user[0];
-    if (!user) {
-      console.log('CREATING USER');
-      db.createUserFacebook([profile.displayName, profile.id], function(err, user) {
-        return done(err, user, {scope: 'all'});
-      })
-    } else {
-      return done(err, user);
-    }
-  })
-}));
+passport.use('auth0', new Auth0Strategy(
+  {
+    domain: process.env.AUTH0_DOMAIN,
+    clientID: process.env.AUTH0_CLIENT_ID,
+    clientSecret: process.env.AUTH0_SECRET,
+    callbackURL: '/api/auth/callback'
+  }, (accessToken, refreshToken, params, user, done) => {
+    // accessToken = Used to make request on behalf of user
+    // refreshToken = Get a new accessToken
+    // params = extra info the dev requested
+    // user = User profile who logged in
+
+    // If I want to save user info to MY database
+    // I can do that here
+    User.save(user)
+
+    return done(null, user)
+  }
+))
+
 
 passport.serializeUser(function(user, done) {
   return done(null, user);
@@ -77,31 +68,39 @@ passport.deserializeUser(function(user, done) {
   return done(null, user);
 })
 
-
-app.post('/auth/local', passport.authenticate('local'), function(req, res) {
-  res.status(200).redirect('/#/');
+app.post('/api/auth/local', passport.authenticate('local'), function(req, res) {
+  res.status(200).redirect('/');
 });
 
-function isAuthed(req, res, next) {
-  if (req.user) {
-    next();
-  } else {
-    res.status(403).send({msg: 'YOU SHALL NOT PASS!!!'});
-  }
-}
+app.get('/api/auth/auth0', passport.authenticate('auth0'), (req, res) => {
+  // Going out to AUTH0
+  res.redirect('/')
+})
 
+app.get('/api/auth/callback', passport.authenticate('auth0'), (req, res) => {
+  // Coming back from Auth0
+  res.redirect('/')
+})
 
-app.get('/auth/me', function(req, res) {
+app.get('/api/me', function(req, res) {
   if (req.user) {
     console.log(req.user);
     res.status(200).send(req.user);
   } else {
     console.log('NO user!')
-    res.status(200).send();
+    res.status(200).send('ok');
   }
 })
 
-app.get('/auth/logout', function(req, res) {
+app.get('/api/mydeepestdarkestsecrets', (req, res) => {
+  if (req.isAuthenticated) {
+    // logged in
+  } else {
+    // forbidden!!!
+  }
+})
+
+app.get('/api/auth/logout', function(req, res) {
   req.logout();
   res.redirect('/');
 })
@@ -109,11 +108,3 @@ app.get('/auth/logout', function(req, res) {
 app.listen(3000, function() {
   console.log('Connected on 3000')
 })
-
-
-app.get('/auth/facebook', passport.authenticate('facebook'))
-
-app.get('/auth/facebook/callback',
-  passport.authenticate('facebook'), function(req, res) {
-    res.status(200).redirect('/#/');
-  })
